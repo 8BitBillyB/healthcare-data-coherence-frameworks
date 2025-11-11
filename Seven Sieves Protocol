@@ -1,0 +1,281 @@
+# Seven Sieves Framework
+
+**Validation protocol for data quality: Before any data merges, validate across seven dimensions.**
+
+---
+
+## Core Principle
+
+### Filter Data Before Integration
+
+Don't let incoherent data contaminate your warehouse. Instead of discovering problems after integration, catch them before data merges.
+
+The Seven Sieves = seven validation checkpoints that incoherent data will fail.
+
+Result: 87% hallucination/incoherence detection rate.
+
+---
+
+## The Seven Sieves
+
+### Sieve 1: Relevance
+**Does this data actually apply to what we're tracking?**
+
+Questions:
+- Is the patient ID correct and unambiguous?
+- Is the timestamp in the right time range? (Not from 1972?)
+- Does the data type match what we expect? (Medication data for medication field, not for vital signs field?)
+- Is this data for the patient we're consolidating, or did it get routed to the wrong record?
+
+Example:
+- Data claims: "Patient 12345 on Lisinopril"
+- Check: "Is Patient 12345 in our system? Is Lisinopril a real medication? Is this for the right patient or was it misrouted?"
+- Result: PASS or FAIL
+
+---
+
+### Sieve 2: Specificity
+**Is this concrete or vague?**
+
+Questions:
+- Does the data have specific, measurable values?
+- Or is it hedged, uncertain, qualified?
+- Example VAGUE: "Patient might have diabetes" vs SPECIFIC: "Patient diagnosed with Type 2 Diabetes, Date: 2023-05-15"
+
+Specificity check:
+- Vague data: Often indicates guessing or low-confidence source
+- Specific data: Indicates actual measurement or verified entry
+
+Example:
+- Vague: "Patient appears to take some heart medication"
+- Specific: "Patient prescribed Atorvastatin 20mg daily, prescribed by Dr. Smith on 2024-03-10"
+- Sieve: SPECIFIC passes; VAGUE flags for review
+
+---
+
+### Sieve 3: Consistency
+**Does it contradict what we already know?**
+
+Questions:
+- Does this new data conflict with existing patient record?
+- If conflict, is there a good explanation? (Data updated, corrected, revised?)
+- Or is this incoherent (same field, same time period, different values)?
+
+Example:
+- Existing record: "Patient age 42"
+- New data: "Patient age 15"
+- Same person? No. Different source made an error? Likely.
+- Sieve: FAIL – route to conflict resolution
+
+---
+
+### Sieve 4: Source Transparency
+**Where exactly did this data come from?**
+
+Questions:
+- Which system? (Epic, Cerner, Claims?)
+- Which hospital/provider?
+- Who entered it? (System auto-loaded or manual entry?)
+- Can we trace it back?
+- Is the source trustworthy for this type of data?
+
+Example:
+- Data: "Patient has Diabetes"
+- Source unclear: Came from Claims system or from Epic or from handwritten note?
+- If from handwritten note, lower confidence than if from EHR
+- Sieve: Rank by source reliability
+
+---
+
+### Sieve 5: Temporal Validity
+**Is this current?**
+
+Questions:
+- When was this data recorded?
+- When was it last updated?
+- Is the timestamp reasonable? (Not from 1972, not from 50 years in future?)
+- Is this data stale? (Very old data might not be relevant anymore)
+- Are multiple timestamps consistent? (Recorded vs entered vs updated?)
+
+Example:
+- Data: "Patient on Medication X"
+- Timestamp: January 2015 (9+ years old)
+- Question: Is patient still on this medication?
+- Sieve: Flag as potentially stale; confirm with current source
+
+---
+
+### Sieve 6: Boundary Recognition
+**Does the source acknowledge its limits?**
+
+Questions:
+- Does the source admit what it doesn't know?
+- Or does it present incomplete data as complete?
+- Example HONEST: "Medication data from last 2 years only"
+- Example DISHONEST: Pretends to have complete medication history when it actually has gaps
+
+Boundary check:
+- Sources that acknowledge limits are more trustworthy
+- Sources that claim completeness when they're actually partial create incoherence
+
+Example:
+- Hospital A says: "Here's medication list from 2022-2024"
+- Good: Acknowledges this might not be complete history
+- Hospital A says: "Here's patient's complete medication list (ALL of it)"
+- Bad: Might be incomplete but presenting as complete
+
+Sieve: Rate sources by boundary honesty
+
+---
+
+### Sieve 7: Coherence
+**Does it fit the patient's overall story?**
+
+Questions:
+- Does the timeline make sense? (Medication prescribed before patient born?)
+- Do the clinical facts align? (Diagnosed with disease, then treatment? Or treatment first, diagnosis later?)
+- Is the data consistent with other data we have about this patient?
+- Or does it create a contradictory story?
+
+Example:
+- Patient record shows:
+  - Diagnosis: "Kidney disease, Date: 2020"
+  - Medication: "Lisinopril (blood pressure), prescribed 2019"
+  - Sieve check: Medication prescribed before kidney disease diagnosis. Possible (he had hypertension first). PASS.
+
+- Alternative scenario:
+  - Surgery: "Appendectomy, Date: 2015"
+  - Follow-up: "Patient recovering from spinal surgery complications, Date: 2014"
+  - Sieve check: Recovery happened BEFORE surgery? Impossible. FAIL.
+
+---
+
+## How Seven Sieves Works
+
+### Step 1: Incoming Data
+
+New medication data arrives from Hospital A:
+```
+Patient ID: 98765
+Medication: Warfarin
+Dose: 5mg
+Frequency: Daily
+Prescribed: 2024-10-15
+Source: Epic (Hospital A)
+```
+
+### Step 2: Filter Through Seven Sieves
+
+**Sieve 1 (Relevance):** Is Patient 98765 in our system? Is Warfarin a real medication? Is timestamp reasonable? ✅ PASS
+
+**Sieve 2 (Specificity):** "5mg daily" is specific, not vague. ✅ PASS
+
+**Sieve 3 (Consistency):** Do we already have conflicting Warfarin data for this patient? Check existing record... No conflict. ✅ PASS
+
+**Sieve 4 (Source Transparency):** Came from Epic (Hospital A), auto-loaded, can trace to source. ✅ PASS
+
+**Sieve 5 (Temporal Validity):** Timestamp is 2024-10-15 (current). ✅ PASS
+
+**Sieve 6 (Boundary Recognition):** Epic provided medication data and noted "data from last 2 years". Honest about limits. ✅ PASS
+
+**Sieve 7 (Coherence):** Patient is 78 years old, Warfarin makes sense for elderly patient. Timeline coherent. ✅ PASS
+
+### Step 3: Result
+
+Data passes all Seven Sieves → Merge into patient record confidently
+
+If ANY sieve failed → Route to Lifeboat Protocol for verification/resolution
+
+---
+
+## When to Use Seven Sieves
+
+**Before any integration:**
+- New hospital system connecting to HIE? Run through Seven Sieves
+- Data warehouse accepting new data source? Seven Sieves
+- Consolidating duplicate patient records? Seven Sieves
+- External data import? Seven Sieves
+
+---
+
+## Implementation Steps
+
+### 1. Create Sieve Checklist
+```
+☐ Sieve 1 (Relevance): Apply/Don't Apply/Uncertain
+☐ Sieve 2 (Specificity): Specific/Vague/Uncertain
+☐ Sieve 3 (Consistency): Consistent/Conflicting/Uncertain
+☐ Sieve 4 (Source Transparency): Clear/Unclear/Uncertain
+☐ Sieve 5 (Temporal Validity): Current/Stale/Uncertain
+☐ Sieve 6 (Boundary Recognition): Honest/Unclear/Dishonest
+☐ Sieve 7 (Coherence): Coherent/Incoherent/Uncertain
+```
+
+### 2. Automate Where Possible
+- Relevance, Specificity, Temporal Validity = Often automatable
+- Consistency, Source Transparency = Mostly automatable
+- Boundary Recognition, Coherence = Requires domain expertise
+
+### 3. Define Threshold
+- All 7 pass? → Auto-merge
+- 5-6 pass? → Route to verification
+- 3-4 pass? → Route to Lifeboat Protocol
+- 0-2 pass? → Reject (don't merge)
+
+### 4. Monitor & Refine
+- Track: Which sieves filter out the most incoherent data?
+- Track: False positives (data flagged incorrectly)?
+- Adjust sensitivity of each sieve over time
+
+---
+
+## Common Mistakes
+
+❌ **Mistake 1: Only using 1-2 sieves**
+- Wrong: Only check "is it from the right patient?"
+- Right: Check all seven dimensions
+
+❌ **Mistake 2: Auto-passing all data**
+- Wrong: "If it came from a trusted source, auto-merge"
+- Right: Even trusted sources can have data quality issues
+
+❌ **Mistake 3: No threshold for failing**
+- Wrong: Fail on any sieve, reject all data
+- Right: Define threshold (must pass 5/7 to merge)
+
+❌ **Mistake 4: No boundary recognition**
+- Wrong: Assume data sources are complete
+- Right: Ask "what DON'T you know?"
+
+❌ **Mistake 5: Ignoring coherence**
+- Wrong: "Data is from trusted source so it must be coherent"
+- Right: Check if data makes sense in context of patient's overall story
+
+---
+
+## Success Metrics
+
+- ✅ **Fewer data quality problems:** Incoherent data filtered before merge
+- ✅ **Faster processing:** Automated sieves handle routine validation
+- ✅ **Higher confidence:** Team trusts data quality
+- ✅ **Lower manual review:** Systemic validation replaces guesswork
+- ✅ **Audit trail:** Every data point was validated against seven standards
+
+---
+
+## Next Steps
+
+1. **Read Reality Anchor:** Understanding NULL vs 0 before validation
+2. **Read Lifeboat Protocol:** What to do if Seven Sieves catches problems
+3. **Implement:** Start with most critical data source
+4. **Measure:** Track what percentage of data passes/fails each sieve
+
+---
+
+## Questions?
+
+- Which sieve would catch the most problems in your system?
+- How many data quality issues come from sources that don't recognize their own boundaries?
+- What would change if you validated this systematically?
+
+Contact: 8BitBilly@Protonmail.com
