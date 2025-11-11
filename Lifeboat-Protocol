@@ -1,0 +1,160 @@
+# Lifeboat Protocol
+
+**Recovery framework when incoherent data is detected. When systems drift or data quality breaks down, systematically recover to coherence.**
+
+---
+
+## Core Principle
+
+### When Coherence Breaks, Don't Panic—Recover
+
+Incoherent data WILL slip through (Bad merge happens. Duplicate record created. Conflicting data accepted). The question isn't "if"—it's "when?" and "how do you recover?"
+
+Lifeboat Protocol = systematic recovery when coherence fails.
+
+---
+
+## The Four Steps
+
+### Step 1: STOP
+**Don't accept current data. Don't merge more records. Don't propagate incoherence further.**
+
+Triggers:
+- 3+ Seven Sieves violations in data
+- Explicit duplicate records detected
+- Data from Source A contradicts Source B on same fact
+- System detects incoherence in data you thought was coherent
+
+Action: **STOP the current operation immediately.**
+
+Example:
+- You're merging Hospital A patient 12345 with Hospital B patient 12345
+- During merge: Hospital A says "Age 42", Hospital B says "Age 15"
+- Same person? No. Error? Yes.
+- STOP: Don't merge these. Flag for review.
+
+---
+
+### Step 2: RESET
+**Go back to last verified, coherent state.**
+
+Question: "What do we know for certain?"
+
+Action:
+1. Identify when data became incoherent
+2. Restore to last verified state BEFORE incoherence
+3. Document what was lost (data from the failed merge)
+4. Prepare to re-integrate properly
+
+Example:
+- Incoherent data detected at 14:30
+- Last verified coherent state: 13:15 (75 minutes ago)
+- Action: Restore warehouse to 13:15 backup
+- Lost: Data merged between 13:15-14:30 (approximately 500 records)
+
+---
+
+### Step 3: RESTATE
+**What do we ACTUALLY know? What's proven true vs what's uncertain?**
+
+Review the facts:
+- Which records were definitely correct?
+- Which records had problems?
+- Which sources are trustworthy?
+- Which sources caused the incoherence?
+
+Actions:
+1. Sort data into: Verified good / Conflicting / Uncertain
+2. Identify the source of incoherence (which data source? which field? which rule failed?)
+3. Establish: "We know X for certain, Y is questionable, Z is unknown"
+
+Example:
+- Hospital A data: Appears good (passed Seven Sieves)
+- Hospital B data: 80% good, 20% conflicting with Hospital A
+- Source of problem: Hospital B loading old data as current
+- What we know: Hospital A is more recent, more reliable for this period
+
+---
+
+### Step 4: RESUME
+**Re-integrate with enhanced validation.**
+
+Actions:
+1. Reapply Seven Sieves more strictly
+2. Add Reality Anchor checks (NULL vs 0)
+3. Get domain expert review (not just system validation)
+4. Re-merge data one record at a time (not bulk)
+5. Monitor closely for re-emergence of incoherence
+
+Example:
+- RESET: Restored to 13:15
+- RESTATE: Hospital B data is problematic
+- RESUME: Re-integrate Hospital A (all passes Seven Sieves)
+- Then re-integrate Hospital B with manual spot checks (first 50 records reviewed by human)
+- Monitor: Check for incoherence signals
+
+---
+
+## When to Trigger Lifeboat Protocol
+
+### Automatic Triggers
+
+❌ **3+ Seven Sieves violations** in same record
+- Data fails Relevance, Specificity, AND Consistency? → LIFEBOAT
+
+❌ **Explicit duplicate detection**
+- Same patient appears twice in merged data? → LIFEBOAT
+
+❌ **Source contradiction**
+- Hospital A: "Patient on Medication X"
+- Hospital B: "Patient NOT on Medication X" (explicitly confirmed)
+- Same timeframe? → LIFEBOAT
+
+❌ **Temporal incoherence**
+- Death date before birth date
+- Follow-up before procedure
+- Discharge before admission
+- → LIFEBOAT
+
+❌ **Batch failure rate exceeds threshold**
+- 15% of incoming records fail validation
+- Threshold is 5%
+- → LIFEBOAT (don't accept this batch)
+
+### Manual Triggers
+
+✋ **Domain expert says "something's wrong"**
+- Clinician: "This data doesn't look right"
+- Analyst: "I don't trust this merge"
+- Data scientist: "Quality metrics are degrading"
+- → LIFEBOAT (systematic review triggered)
+
+✋ **Audit discovers problems**
+- Post-merge quality check finds issues
+- Patient safety concern identified
+- → LIFEBOAT (investigate and recover)
+
+---
+
+## Success Metrics
+
+**How do you know Lifeboat Protocol is working?**
+
+- ✅ **Fewer incoherent records in warehouse:** Incoherence caught early, not propagated
+- ✅ **Faster recovery:** From incoherence detection to fix
+- ✅ **High confidence:** Team trusts data because recovery is systematic
+- ✅ **Low customer impact:** Merge failures handled internally, don't affect users
+- ✅ **Audit trail:** Every STOP/RESET/RESTATE is logged
+
+---
+
+## Next Steps
+
+1. **Read Coherence Matrix:** How to measure if you're actually coherent
+2. **Read Seven Sieves:** Prevent incoherence before STOP is needed
+3. **Define your thresholds:** At what point do YOU trigger Lifeboat?
+4. **Test recovery:** Do you have a working backup/restore process?
+
+---
+
+Contact: 8BitBilly@Protonmail.com
