@@ -1,0 +1,244 @@
+# Reality Anchor Framework
+
+**Distinguish NULL (unknown) from 0 (known-empty) to prevent cascading errors in integrated systems.**
+
+---
+
+## Core Principle
+
+### NULL ≠ 0
+
+- **NULL** = "We don't have this data" (data not received, not yet loaded, unknown)
+- **0** = "We have data, but the value is zero/empty/false" (data received, confirmed absent)
+
+This distinction prevents systems from making false assumptions when data sources conflict or arrive out of sync.
+
+---
+
+## Why This Matters
+
+### Example: Patient Medications
+
+Three data sources for Patient 12345:
+
+**Hospital A:** Medication field = NULL
+- Interpretation: We haven't received Hospital A's data yet
+
+**Hospital B:** Medication field = "Lisinopril, Metformin"
+- Interpretation: We have Hospital B's data, patient is on two medications
+
+**Claims System:** Medication field = 0 (explicitly coded as no medications)
+- Interpretation: Claims system has no medication records for this patient
+
+**Without Reality Anchor:**
+System says: "Patient has medications (Hospital B) and patient has no medications (Claims). Data is incoherent. Manual review required."
+
+Result: Data quality issues, medication errors, delayed treatment.
+
+**With Reality Anchor:**
+System distinguishes:
+- Hospital A data is NULL (pending) → Wait for it
+- Hospital B has actual data → Tentatively accept
+- Claims has explicit 0 → Conflict with Hospital B, investigate
+
+Result: System knows what to expect vs what's contradictory. Prevents false conflicts.
+
+---
+
+## How Reality Anchor Works
+
+### Step 1: Identify NULL vs 0 States
+
+When data arrives from multiple sources, classify each field:
+
+| Source | Field | Value | Classification | Meaning |
+|--------|-------|-------|-----------------|---------|
+| Hospital A | Medication | (empty) | NULL | Not yet received |
+| Hospital B | Medication | Lisinopril, Metformin | 0 or Value | Actual data |
+| Claims | Medication | Explicitly 0 | 0 (not NULL) | No medications (confirmed) |
+
+### Step 2: Set Merge Rules
+
+**Before merging data, establish:**
+
+- What's the authoritative source for this field?
+- If sources conflict, which takes precedence?
+- If one source has NULL and another has data, do we assume NULL will match once loaded?
+- Do we wait for all sources before considering patient record "complete"?
+
+### Step 3: Validate at Merge Time
+
+When consolidating patient data:
+
+```
+IF Hospital_A.medication = NULL 
+  AND Hospital_B.medication = "Lisinopril"
+  AND Claims.medication = 0
+THEN: 
+  Action 1: Flag as "conflicting medication data"
+  Action 2: Don't auto-merge until resolved
+  Action 3: Route to clinical verification
+  (Don't assume Hospital A will match Hospital B once data loads)
+```
+
+### Step 4: Establish Fallback Rules
+
+Define what happens when data conflicts:
+
+- **Merge strategy:** Use all non-NULL values
+- **Conflict strategy:** When sources differ on actual data (Hospital B says "yes", Claims says "no"), flag for review
+- **Wait strategy:** When one source is NULL, wait X days for data to arrive before finalizing record
+
+---
+
+## Real-World Application: Healthcare Data Warehouse
+
+### Problem: Multi-Source Integration Incoherence
+
+Health Data Partners integrating:
+- Epic (Hospital A): Loads daily, medication list sometimes NULL on first load
+- Cerner (Hospital B): Loads in real-time, medication data always populated
+- Claims System: Loads weekly, explicitly codes "no medications" as 0
+
+Patient 54321 from Hospital A and Hospital B:
+
+| System | Status | Medications |
+|--------|--------|-------------|
+| Epic (Day 1) | Loading | NULL |
+| Cerner (Day 1) | Complete | Aspirin, Atorvastatin |
+| Claims (Day 1) | Pending | NULL (not yet loaded) |
+
+**Without Reality Anchor:**
+- "Data is incomplete, can't merge"
+- Manual review required
+- Data quality metrics drop
+- System appears unreliable
+
+**With Reality Anchor:**
+- Epic medication = NULL (pending Epic data)
+- Cerner medication = actual data (accept as current)
+- Claims = NULL (pending weekly load)
+- System state: "Patient record PARTIAL but coherent. Cerner data accepted. Awaiting Epic + Claims completion."
+- Auto-resume merge when all sources loaded
+
+Result: **Warehouse operates reliably even with async, multi-source data arrival.**
+
+---
+
+## Decision Tree: When to Apply Reality Anchor
+
+**Q1: Do you have data from multiple sources?**
+- Yes → Apply Reality Anchor
+- No → Skip this framework
+
+**Q2: Do sources arrive at different times?**
+- Yes → Apply Reality Anchor (prevents "NULL" from being misinterpreted as "0")
+- No → Reality Anchor is less critical but still useful
+
+**Q3: Do any systems explicitly code "no data" or "no value"?**
+- Yes → Apply Reality Anchor (critical distinction)
+- No → Reality Anchor is still valuable for data quality
+
+**Q4: Is manual data review slowing down your processes?**
+- Yes → Reality Anchor likely solves your problem
+- No → Reality Anchor still adds clarity
+
+---
+
+## Implementation Steps
+
+### 1. Audit Current System
+- What fields come from which sources?
+- Which fields have NULL values?
+- Which fields explicitly code "0" or "no value"?
+- Where do data conflicts occur?
+
+### 2. Define NULL vs 0 for Each Field
+Create a data dictionary:
+
+```
+Patient.medication:
+  Source: Epic, Cerner, Claims
+  NULL interpretation: "Data not yet received from this source"
+  0 interpretation: "Source confirms no medications"
+  Merge rule: "Use non-NULL values; if conflict between 0 and value, flag for review"
+```
+
+### 3. Implement Merge Logic
+Build validation into data integration:
+
+```
+BEFORE merging patient records:
+  FOR each field:
+    IF value = NULL: Mark as "pending"
+    IF value = 0: Mark as "confirmed empty"
+    IF value = actual_data: Accept and mark as "confirmed present"
+    
+    IF field has mixed NULL/0/data: Route to Lifeboat Protocol
+```
+
+### 4. Test on Conflicting Records
+- Take 100 patient records with data conflicts
+- Apply Reality Anchor logic
+- Measure: reduction in manual review, correct resolution of conflicts
+- Iterate
+
+### 5. Monitor & Refine
+- Track: How often does NULL → actual data change record state?
+- Track: How often do conflicting fields get resolved correctly?
+- Adjust merge rules based on real outcomes
+
+---
+
+## Common Mistakes (What NOT to Do)
+
+❌ **Mistake 1: Treating NULL and 0 as identical**
+- Wrong: "If Hospital A has NULL medication, assume they have no medications"
+- Right: NULL = pending; 0 = confirmed empty. Treat differently.
+
+❌ **Mistake 2: Auto-merging NULL records**
+- Wrong: "Hospital A is NULL, Hospital B has data, merge them"
+- Right: Wait for Hospital A data or explicitly flag as "partial record"
+
+❌ **Mistake 3: No merge strategy**
+- Wrong: Let system decide what to do with conflicts
+- Right: Establish explicit rules (e.g., "when sources conflict, flag for clinical review")
+
+❌ **Mistake 4: Not distinguishing by source**
+- Wrong: "Epic is always authoritative"
+- Right: Determine authority by field (medication from Pharmacy system, vitals from EHR, etc.)
+
+❌ **Mistake 5: Ignoring temporal dimension**
+- Wrong: Assume old NULL will match new data from same source
+- Right: Track when data was loaded; NULL from Day 1 is not the same as NULL from Day 5
+
+---
+
+## Success Metrics
+
+**How do you know Reality Anchor is working?**
+
+- ✅ **Fewer manual reviews:** Data conflicts are resolved systematically, not manually
+- ✅ **Faster merge times:** Don't wait for all sources; process partial records
+- ✅ **Higher data quality:** Fewer false conflicts, fewer merged errors
+- ✅ **Better decisions:** Team trusts data because NULL/0 distinction is explicit
+- ✅ **System reliability:** No cascading errors from misinterpreted NULL values
+
+---
+
+## Next Steps
+
+1. **Read Seven Sieves:** Validation before merge
+2. **Read Lifeboat Protocol:** Recovery when Reality Anchor fails
+3. **Use template:** Apply to your specific data sources
+4. **Share results:** What NULL/0 distinctions matter in your system?
+
+---
+
+## Questions?
+
+- How do you currently handle NULL values?
+- Which data sources cause the most conflicts?
+- What would change if you distinguished NULL from 0?
+
+Contact: 8BitBilly@Protonmail.com
